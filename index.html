@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="La cámara encuentra animales y cada movimiento suena como una nota propia de su especie.">
+<meta name="theme-color" content="#f0f0f0">
+<title>Carnofagocentrismo</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="preconnect" href="https://storage.googleapis.com" crossorigin>
+<style>
+:root{--bg:#f0f0f0;--ink:#111;--mute:#666;--line:#d4d4d4;--acc:#1d3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--bg:#101112;--ink:#eee;--mute:#8d9193;--line:#2b2e30;--acc:#6f86ff}}
+*{box-sizing:border-box;margin:0}
+[hidden]{display:none!important}
+html,body{background:var(--bg);color:var(--ink)}
+body{font:15px/1.45 ui-sans-serif,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+.app{display:flex;flex-direction:column;height:100dvh;padding-bottom:env(safe-area-inset-bottom,0px)}
+.view{position:relative;flex:1;min-height:0;background:#000;overflow:hidden}
+.view video,.view canvas{position:absolute;inset:0;width:100%;height:100%}
+.view video{object-fit:cover;filter:grayscale(1) contrast(1.05)}
+.ph{position:absolute;inset:0;display:grid;place-content:center;gap:14px;padding:calc(24px + env(safe-area-inset-top,0px)) 24px 24px;text-align:center;color:#ddd}
+.ph h1{font-size:1.3rem;font-weight:500;letter-spacing:-.01em;color:#fff}
+.ph p{max-width:38ch;margin:0 auto;font-size:.95rem;color:#bbb}
+.row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+button,.btn{font:inherit;font-size:.92rem;color:var(--ink);background:none;border:1px solid var(--ink);padding:7px 13px;cursor:pointer;border-radius:0;display:inline-block}
+button:hover,.btn:hover{background:var(--ink);color:var(--bg)}
+.ph button,.ph .btn{color:#fff;border-color:#fff}
+.ph button:hover,.ph .btn:hover{background:#fff;color:#000}
+
+.cc{position:absolute;left:0;right:0;bottom:14px;z-index:3;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:0 12px}
+.cc button{color:#fff;border-color:#fff;background:rgba(0,0,0,.6)}
+.cc button:hover{background:#fff;color:#000}
+
+.tab{flex:none;display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:9px 12px;border:0;border-top:1px solid var(--line);background:var(--bg);color:var(--mute);font-size:.85rem}
+.tab:hover{background:var(--line);color:var(--ink)}
+.tab i{width:7px;height:7px;border:solid currentColor;border-width:0 2px 2px 0;transform:rotate(45deg);margin-top:-3px}
+.app.closed .tab i{transform:rotate(-135deg);margin-top:3px}
+
+.panel{flex:none;max-height:44dvh;overflow:auto;padding:18px 18px 40px}
+.app.closed .panel{display:none}
+.panel section{padding:16px 0;border-top:1px solid var(--line)}
+.panel section:first-child{border-top:0;padding-top:0}
+h2{font-size:.85rem;font-weight:500;color:var(--mute);margin-bottom:8px}
+#status{font-size:1.05rem}
+#status.on::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--acc);margin-right:8px;animation:p 1.2s infinite}
+@keyframes p{50%{opacity:.25}}
+.meta{display:flex;gap:18px;color:var(--mute);font-size:.85rem;margin-top:4px;font-variant-numeric:tabular-nums}
+ul{list-style:none;padding:0}
+#list li{display:grid;grid-template-columns:1fr auto auto;gap:12px;padding:6px 0;border-bottom:1px solid var(--line);font-size:.92rem}
+#list li span{color:var(--mute)}#list li em{font-style:normal;color:var(--acc);min-width:7.5em;text-align:right}
+#list .none{display:block;color:var(--mute)}
+details p{color:var(--mute);font-size:.9rem;margin-top:8px;max-width:58ch}
+summary{cursor:pointer}
+@media(min-width:900px){
+  .app{flex-direction:row}
+  .tab{width:34px;flex-direction:column;border-top:0;border-left:1px solid var(--line);padding:12px 0}
+  .tl{writing-mode:vertical-rl}
+  .tab i{transform:rotate(-45deg);margin-top:0}
+  .app.closed .tab i{transform:rotate(135deg);margin-top:0}
+  .panel{width:380px;max-height:none;border-left:1px solid var(--line)}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="view">
+    <video id="v" playsinline muted></video>
+    <canvas id="c"></canvas>
+    <div class="ph" id="ph">
+      <h1>Carnofagocentrismo</h1>
+      <p id="phmsg">La cámara busca aves, perros, gatos, caballos, vacas, ovejas y otros animales. Cada especie tiene su nota y cada movimiento suena distinto.</p>
+      <div class="row">
+        <button id="start">Activar cámara</button>
+        <label class="btn">Usar un video<input id="file" type="file" accept="video/*" hidden></label>
+      </div>
+    </div>
+    <div class="cc" id="cc" hidden>
+      <button id="flip">Cambiar cámara</button>
+      <button id="stop">Detener</button>
+    </div>
+  </div>
+
+  <button class="tab" id="tab" aria-expanded="true" aria-controls="panel"><span class="tl">Ocultar información</span><i aria-hidden="true"></i></button>
+
+  <main class="panel" id="panel">
+    <section>
+      <div id="status" role="status" aria-live="polite">En espera</div>
+      <div class="meta"><span id="mt">Análisis: —</span><span id="cnt">Sonidos: 0</span></div>
+    </section>
+    <section>
+      <h2>Animales en escena</h2>
+      <ul id="list"><li class="none">Ninguno todavía</li></ul>
+    </section>
+    <section>
+      <details>
+        <summary>Acerca de este proyecto</summary>
+        <p>El carnofagocentrismo nombra el dominio del ser humano sobre el animal. La aplicación invierte la mirada: no habla, no ordena, solo escucha. Cada especie tiene su propia nota y su propio timbre, y cada movimiento (quieto, caminar, correr, saltar, acercarse, alejarse, inquieto) es una figura musical distinta. El volumen y la posición del sonido dependen de lo lejos y de dónde esté cada animal.</p>
+        <p>Los sonidos se generan por código en tu dispositivo, sin voces ni grabaciones. La imagen también se procesa en tu dispositivo y no se envía a ningún servidor. Para mejores resultados, mantén el teléfono quieto: si la cámara se mueve, también lo parece el animal. Para aves lejanas, como palomas, acércate o usa el zoom de la cámara.</p>
+      </details>
+    </section>
+  </main>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const COCO = {dog:"perro", cat:"gato", bird:"ave", horse:"caballo", cow:"vaca", sheep:"oveja", elephant:"elefante", bear:"oso", zebra:"cebra", giraffe:"jirafa"};
+const MV = ["quieto","caminar","correr","saltar","acercarse","alejarse","inquieto"];
+
+/* ---------- notas: una por animal, una figura por movimiento ---------- */
+const AN = {
+  perro:   {m:55, y:"triangle", lp:2400, g:.34, h:.1},
+  gato:    {m:72, y:"sine",     lp:6000, g:.30, h:.25},
+  ave:     {m:86, y:"sine",     lp:9000, g:.22, h:.2},
+  caballo: {m:45, y:"sawtooth", lp:1100, g:.16, h:0},
+  vaca:    {m:38, y:"sawtooth", lp:650,  g:.18, h:0},
+  oveja:   {m:64, y:"square",   lp:1600, g:.10, h:0},
+  elefante:{m:36, y:"sine",     lp:700,  g:.40, h:.3},
+  oso:     {m:41, y:"triangle", lp:500,  g:.40, h:0},
+  cebra:   {m:69, y:"square",   lp:2200, g:.09, h:0},
+  jirafa:  {m:79, y:"triangle", lp:5000, g:.26, h:.15}
+};
+/* [semitonos sobre la base, retraso, duración, glissando a, ataque] */
+const FIG = {
+  quieto:   [[0, 0, 1.4]],
+  caminar:  [[2, 0, .35], [4, .22, .45]],
+  correr:   [[0, 0, .18], [4, .09, .18], [7, .18, .18], [12, .27, .32]],
+  saltar:   [[0, 0, .12], [12, .1, .5]],
+  acercarse:[[0, 0, 1.3, 7, .6]],
+  alejarse: [[7, 0, 1.4, 0]],
+  inquieto: [[0, 0, .1], [1, .08, .1], [0, .16, .1], [1, .24, .1], [0, .32, .1], [1, .4, .22]]
+};
+const NAMES = ["Do","Do#","Re","Re#","Mi","Fa","Fa#","Sol","Sol#","La","La#","Si"];
+const nn = m => NAMES[m % 12] + (Math.floor(m / 12) - 1);
+const mf = m => 440 * Math.pow(2, (m - 69) / 12);
+
+/* ---------- síntesis ---------- */
+const A = {ctx:null, master:null, vol:.7};
+function tone(d, t, f, u, o) {
+  const c = A.ctx, b = c.createBiquadFilter(), g = c.createGain();
+  b.type = "lowpass"; b.frequency.value = o.lp;
+  const a = Math.min(o.a || .01, u * .5);
+  g.gain.setValueAtTime(.0001, t);
+  g.gain.linearRampToValueAtTime(o.g, t + a);
+  g.gain.exponentialRampToValueAtTime(.0001, t + u);
+  b.connect(g).connect(d);
+  [[1, 1, o.y], [2, o.h, "sine"]].forEach(([r, v, y]) => {
+    if (!v) return;
+    const s = c.createOscillator(), p = c.createGain();
+    s.type = y; s.frequency.setValueAtTime(f * r, t);
+    if (o.z) s.frequency.exponentialRampToValueAtTime(o.z * r, t + u);
+    p.gain.value = v; s.connect(p).connect(b); s.start(t); s.stop(t + u + .05);
+  });
+}
+function initAudio() {
+  if (A.ctx) { if (A.ctx.state === "suspended") A.ctx.resume(); return; }
+  const c = A.ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const comp = c.createDynamicsCompressor();
+  A.master = c.createGain(); A.master.gain.value = A.vol;
+  A.master.connect(comp); comp.connect(c.destination);
+}
+function play(cls, mv, pan, gain) {
+  const a = AN[cls], fig = FIG[mv];
+  const lab = fig.map(([s, , , z]) => nn(a.m + s) + (z != null ? "→" + nn(a.m + z) : "")).join(" ");
+  if (!A.ctx) return lab;
+  const g = A.ctx.createGain(); g.gain.value = gain;
+  let end = g;
+  if (A.ctx.createStereoPanner) { const p = A.ctx.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan)); g.connect(p); end = p; }
+  end.connect(A.master);
+  const t0 = A.ctx.currentTime + .01;
+  fig.forEach(([s, x, u, z, at]) => tone(g, t0 + x, mf(a.m + s), u, {
+    y:a.y, lp:a.lp, h:a.h, a:at, z:z != null ? mf(a.m + z) : 0,
+    g:a.g * (mv === "quieto" ? .6 : 1)
+  }));
+  return lab;
+}
+
+/* ---------- seguimiento y movimiento ---------- */
+let tracks = [], ids = {}, VW = 1, VH = 1, ripples = [], total = 0, lastAny = 0;
+const inter = (a, b) => {
+  const w = Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0]);
+  const h = Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]);
+  return w > 0 && h > 0 ? w * h : 0;
+};
+/* mismo animal detectado dos veces (p. ej. en el cuadro completo y en un recorte) */
+const dup = (a, b) => {
+  const i = inter(a, b), A1 = a[2] * a[3], B1 = b[2] * b[3];
+  return i > 0 && (i / Math.min(A1, B1) > .6 || i / (A1 + B1 - i) > .4);
+};
+function classify(k) {
+  const up = -k.vy;
+  if (up > 1.6 && up > Math.abs(k.vx) * 1.5) return "saltar";
+  if (k.rev.length >= 3) return "inquieto";
+  if (k.sr > .35) return "acercarse";
+  if (k.sr < -.35) return "alejarse";
+  if (k.v > 1.6) return "correr";
+  return k.v > .25 ? "caminar" : "quieto";
+}
+function update(dets, t) {
+  dets.sort((a, b) => b.score - a.score);
+  const kept = [];
+  dets.forEach(d => { if (!kept.some(k => k.cls === d.cls && dup(k.bbox, d.bbox))) kept.push(d); });
+  const dead = Math.max(3, VW * .003);          /* ruido de la caja, en píxeles */
+  const used = new Set();
+  kept.forEach(d => {
+    const [x, y, w, h] = d.bbox, cx = x + w / 2, cy = y + h / 2, sz = Math.max(w, h);
+    let best = null, bd = .75;
+    tracks.forEach(k => {
+      if (k.cls !== d.cls || used.has(k)) return;
+      const dist = Math.hypot(k.cx - cx, k.cy - cy) / Math.max(k.sz, sz);
+      if (dist < bd) { bd = dist; best = k; }
+    });
+    if (!best) {
+      ids[d.cls] = (ids[d.cls] || 0) + 1;
+      best = {cls:d.cls, n:ids[d.cls], cx, cy, sz, px:cx, py:cy, ps:sz, bx:x, by:y, bw:w, bh:h, dx:x, dy:y, dw:w, dh:h, t, seen:t, v:0, vx:0, vy:0, sr:0, rev:[], sg:0, mv:null, cand:"", cn:0, sa:0, snd:"", st:0};
+      tracks.push(best);
+    } else {
+      const dt = (t - best.t) / 1000;
+      if (dt > .05) {
+        /* posición suavizada con zona muerta: evita falsos movimientos en aves pequeñas */
+        const nx = best.px + (cx - best.px) * .55, ny = best.py + (cy - best.py) * .55, ns = best.ps + (sz - best.ps) * .55;
+        const db = v => Math.sign(v) * Math.max(0, Math.abs(v) - dead);
+        const dl = Math.log(ns / best.ps), e = (o, n) => o + (n - o) * .45;
+        best.vx = e(best.vx, db(nx - best.px) / dt / best.ps);
+        best.vy = e(best.vy, db(ny - best.py) / dt / best.ps);
+        best.v = Math.hypot(best.vx, best.vy);
+        best.sr = e(best.sr, (Math.abs(dl) < .03 ? 0 : dl) / dt);
+        best.px = nx; best.py = ny; best.ps = ns;
+        if (Math.abs(best.vx) > .4) {
+          const s = Math.sign(best.vx);
+          if (best.sg && s !== best.sg) best.rev.push(t);
+          best.sg = s;
+        }
+        best.t = t;
+      }
+      Object.assign(best, {cx, cy, sz, bx:x, by:y, bw:w, bh:h, seen:t});
+    }
+    used.add(best);
+  });
+  tracks.forEach(k => {
+    if (!used.has(k)) { k.v *= .8; k.vx *= .8; k.vy *= .8; k.sr *= .8; }
+    k.rev = k.rev.filter(x => t - x < 4000);
+  });
+  /* las aves se pierden y reaparecen más: se conservan más tiempo */
+  tracks = tracks.filter(k => t - k.seen < (k.cls === "ave" ? 4000 : 2500));
+  tracks.forEach(k => {
+    const mv = classify(k);
+    k.cn = mv === k.cand ? k.cn + 1 : 1; k.cand = mv;
+    const changed = k.cn >= 2 && mv !== k.mv;
+    if (changed) k.mv = mv;
+    if (!k.mv) return;
+    const every = {quieto:7000, caminar:1800, correr:1100}[k.mv] || 3000;
+    if (changed || t - k.sa > every) fire(k, t);
+  });
+  render();
+}
+function fire(k, t) {
+  if (t - lastAny < 250) return;
+  lastAny = k.sa = t;
+  k.snd = play(k.cls, k.mv, k.cx / VW * 2 - 1, Math.max(.3, Math.min(1, .3 + k.sz / VW * 1.6)));
+  k.st = t; total++;
+  ripples.push({x:k.cx, y:k.cy, t, r:k.sz});
+}
+
+/* ---------- detección ---------- */
+let model = null, loading = false, failed = false, running = false, gen = 0, tick = 0, avgFull = 200, facing = "environment", stream = null;
+const OC = document.createElement("canvas"), OX = OC.getContext("2d");
+const video = $("#v");
+
+const loadScript = src => new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = no; document.head.append(s); });
+async function loadModel() {
+  loading = true; failed = false; model = null; status();
+  try {
+    if (!window.cocoSsd) {
+      await loadScript("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js");
+      await loadScript("https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js");
+    }
+    let m;
+    try { m = await cocoSsd.load({base:"mobilenet_v2"}); }      /* el más preciso: mejor con animales pequeños */
+    catch (e) { m = await cocoSsd.load({base:"lite_mobilenet_v2"}); }
+    const w = document.createElement("canvas"); w.width = w.height = 64;
+    await m.detect(w, 1);                                         /* calentamiento: evita el tirón del primer análisis */
+    model = m;
+  } catch (e) { failed = true; }
+  loading = false; status();
+}
+async function run(sx, sy, sw, sh, side) {
+  const k = Math.min(1, side / Math.max(sw, sh)), w = Math.round(sw * k), h = Math.round(sh * k);
+  if (OC.width !== w) OC.width = w;
+  if (OC.height !== h) OC.height = h;
+  OX.drawImage(video, sx, sy, sw, sh, 0, 0, w, h);
+  const res = await model.detect(OC, 20);
+  return res.filter(o => COCO[o.class]).map(o => ({
+    cls:COCO[o.class], score:o.score,
+    bbox:[sx + o.bbox[0] / k, sy + o.bbox[1] / k, o.bbox[2] / k, o.bbox[3] / k]
+  }));
+}
+/* recorte ampliado: gira por las cuatro esquinas o se centra en un animal pequeño ya visto */
+function pickTile(W, H, i) {
+  const cl = (v, a, b) => Math.max(a, Math.min(b, v));
+  const small = tracks.filter(k => k.sz < W * .2);
+  if (small.length && i % 2) {
+    const k = small[(i >> 1) % small.length], tw = W * .45, th = H * .45;
+    return [cl(k.cx - tw / 2, 0, W - tw), cl(k.cy - th / 2, 0, H - th), tw, th];
+  }
+  const tw = W * .55, th = H * .55, P = [[0, 0], [W - tw, 0], [0, H - th], [W - tw, H - th]][(i >> 1) % 4];
+  return [P[0], P[1], tw, th];
+}
+async function cycle(g) {
+  if (!running || g !== gen) return;
+  if (model && !document.hidden && video.readyState >= 2 && video.videoWidth) {
+    const W = VW = video.videoWidth, H = VH = video.videoHeight, t0 = performance.now();
+    try {
+      let d = await run(0, 0, W, H, 640);
+      avgFull = avgFull * .7 + (performance.now() - t0) * .3;
+      const big = tracks.some(k => k.sz > W * .35);
+      /* en equipos rápidos se revisa un recorte en cada ciclo; en lentos, uno de cada tres */
+      const tile = avgFull < 260 ? (!big || (tick & 1)) : tick % 3 === 2;
+      if (tile) { const r = pickTile(W, H, tick); d = d.concat(await run(r[0], r[1], r[2], r[3], 640)); }
+      tick++;
+      if (running && g === gen) {
+        update(d, performance.now());
+        $("#mt").textContent = "Análisis: " + Math.round(performance.now() - t0) + " ms";
+      }
+    } catch (e) {}
+  }
+  setTimeout(() => cycle(g), document.hidden ? 500 : 20);
+}
+
+async function openCam() {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:facing, width:{ideal:1920}, height:{ideal:1080}}});
+  } catch (e) {
+    stream = await navigator.mediaDevices.getUserMedia({video:true});
+  }
+  video.removeAttribute("src"); video.loop = false;
+  video.srcObject = stream; await video.play();
+}
+function begin() {
+  $("#ph").hidden = true;
+  initAudio();
+  if (!running) { running = true; const g = ++gen; requestAnimationFrame(() => draw(g)); cycle(g); }
+  if (!model && !loading) loadModel();
+}
+function stop() {
+  running = false; gen++;
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  video.pause(); video.srcObject = null; video.removeAttribute("src"); video.load();
+  tracks = []; ripples = []; VW = VH = 1;
+  clearTimeout(ccT); $("#cc").hidden = true;
+  X.setTransform(1, 0, 0, 1, 0, 0); X.clearRect(0, 0, cv.width, cv.height); cleared = true;
+  $("#ph").hidden = false; lastHtml = ""; render();
+}
+$("#start").onclick = async () => {
+  try { await openCam(); begin(); }
+  catch (e) { $("#phmsg").textContent = "No se pudo abrir la cámara. Revisa el permiso del navegador o usa un video."; }
+};
+$("#file").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  video.srcObject = null; video.src = URL.createObjectURL(f); video.loop = true;
+  await video.play(); tracks = []; begin();
+};
+$("#flip").onclick = async () => { facing = facing === "environment" ? "user" : "environment"; try { await openCam(); tracks = []; } catch (e) {} };
+$("#stop").onclick = stop;
+
+/* tocar el visor muestra unos segundos "Cambiar cámara" y "Detener" */
+let ccT = 0;
+$(".view").addEventListener("click", () => {
+  if (!running) return;
+  $("#flip").hidden = !stream;
+  $("#cc").hidden = false;
+  clearTimeout(ccT); ccT = setTimeout(() => { $("#cc").hidden = true; }, 4000);
+});
+
+$("#tab").onclick = () => {
+  const closed = $("#app").classList.toggle("closed");
+  $("#tab").setAttribute("aria-expanded", String(!closed));
+  $(".tl").textContent = closed ? "Mostrar información" : "Ocultar información";
+};
+
+/* ---------- dibujo ---------- */
+const cv = $("#c"), X = cv.getContext("2d");
+let CW = 1, CH = 1, DPR = 1, ACC = "#1d3bff", cleared = true;
+const readAcc = () => { ACC = getComputedStyle(document.documentElement).getPropertyValue("--acc").trim() || ACC; };
+readAcc(); matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readAcc);
+new ResizeObserver(() => {
+  const r = cv.getBoundingClientRect(); DPR = devicePixelRatio || 1; CW = r.width; CH = r.height;
+  cv.width = Math.round(CW * DPR); cv.height = Math.round(CH * DPR);
+}).observe(cv);
+function draw(g) {
+  if (!running || g !== gen) return;
+  requestAnimationFrame(() => draw(g));
+  if (!tracks.length && !ripples.length) {
+    if (!cleared) { X.setTransform(1, 0, 0, 1, 0, 0); X.clearRect(0, 0, cv.width, cv.height); cleared = true; }
+    return;
+  }
+  cleared = false;
+  X.setTransform(DPR, 0, 0, DPR, 0, 0); X.clearRect(0, 0, CW, CH);
+  const sc = Math.max(CW / VW, CH / VH), ox = (CW - VW * sc) / 2, oy = (CH - VH * sc) / 2, t = performance.now();
+  X.font = "12px ui-sans-serif, Arial"; X.textBaseline = "middle";
+  tracks.forEach(k => {
+    const l = .35;
+    k.dx += (k.bx - k.dx) * l; k.dy += (k.by - k.dy) * l; k.dw += (k.bw - k.dw) * l; k.dh += (k.bh - k.dh) * l;
+    const x = k.dx * sc + ox, y = k.dy * sc + oy, w = k.dw * sc, h = k.dh * sc, c = Math.min(14, w / 3, h / 3);
+    X.strokeStyle = "#fff"; X.lineWidth = 2;
+    X.beginPath();
+    [[x, y, 1, 1], [x + w, y, -1, 1], [x, y + h, 1, -1], [x + w, y + h, -1, -1]].forEach(([a, b, p, q]) => { X.moveTo(a + p * c, b); X.lineTo(a, b); X.lineTo(a, b + q * c); });
+    X.stroke();
+    const txt = `${k.cls} ${k.n}  ${k.mv || ""}`, tw = X.measureText(txt).width + 12;
+    X.fillStyle = ACC; X.fillRect(x, Math.max(0, y - 20), tw, 20);
+    X.fillStyle = "#fff"; X.fillText(txt, x + 6, Math.max(0, y - 20) + 10);
+    const age = t - k.st;
+    if (k.snd && age < 1600) { X.globalAlpha = 1 - age / 1600; X.fillText(k.snd, x, y + h + 14); X.globalAlpha = 1; }
+  });
+  ripples = ripples.filter(p => t - p.t < 1000);
+  ripples.forEach(p => {
+    const a = (t - p.t) / 1000;
+    X.strokeStyle = ACC; X.lineWidth = 2; X.globalAlpha = 1 - a;
+    X.beginPath(); X.arc(p.x * sc + ox, p.y * sc + oy, (p.r * .3 + p.r * 1.1 * a) * sc, 0, 7); X.stroke(); X.globalAlpha = 1;
+  });
+}
+
+/* ---------- panel ---------- */
+let lastList = 0, lastHtml = "";
+function status() {
+  const s = $("#status");
+  if (failed) { s.className = ""; s.textContent = "No se pudo cargar el modelo de visión. Revisa tu conexión y recarga la página."; return; }
+  if (loading) { s.className = "on"; s.textContent = "Cargando modelo de visión…"; return; }
+  if (!running) { s.className = ""; s.textContent = "En espera"; return; }
+  s.className = "on";
+  s.textContent = tracks.length ? (tracks.length === 1 ? "1 animal en escena" : tracks.length + " animales en escena") : "Buscando animales…";
+}
+function render() {
+  status();
+  $("#cnt").textContent = "Sonidos: " + total;
+  const now = performance.now();
+  if (now - lastList < 250) return;
+  lastList = now;
+  const html = tracks.length
+    ? tracks.map(k => `<li><b>${k.cls} ${k.n}</b><span>${k.mv || "…"}</span><em>${k.snd || ""}</em></li>`).join("")
+    : '<li class="none">Ninguno todavía</li>';
+  if (html !== lastHtml) { lastHtml = html; $("#list").innerHTML = html; }
+}
+
+/* el modelo empieza a cargarse al abrir la página para que la cámara arranque más rápido */
+addEventListener("load", () => setTimeout(() => { if (!model && !loading) loadModel(); }, 300));
+</script>
+</body>
+</html>
