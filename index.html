@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="La cámara encuentra animales domésticos y cada movimiento suena como el control humano que los rodea.">
+<meta name="theme-color" content="#f0f0f0">
+<title>Carnofagocentrismo</title>
+<style>
+:root{--bg:#f0f0f0;--ink:#111;--mute:#666;--line:#d4d4d4;--acc:#1d3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--bg:#101112;--ink:#eee;--mute:#8d9193;--line:#2b2e30;--acc:#6f86ff}}
+*{box-sizing:border-box;margin:0}
+html,body{background:var(--bg);color:var(--ink)}
+body{font:15px/1.45 ui-sans-serif,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.app{display:grid;grid-template-columns:1fr;min-height:100dvh}
+.view{position:sticky;top:0;z-index:2;height:52dvh;background:#000;overflow:hidden}
+.view video,.view canvas{position:absolute;inset:0;width:100%;height:100%}
+.view video{object-fit:cover;filter:grayscale(1) contrast(1.05)}
+.ph{position:absolute;inset:0;display:grid;place-content:center;gap:14px;padding:24px;text-align:center;color:#ddd}
+.ph h1{font-size:1.3rem;font-weight:500;letter-spacing:-.01em;color:#fff}
+.ph p{max-width:38ch;margin:0 auto;font-size:.95rem;color:#bbb}
+.row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+button,.btn{font:inherit;font-size:.92rem;color:var(--ink);background:none;border:1px solid var(--ink);padding:7px 13px;cursor:pointer;border-radius:0;display:inline-block}
+button:hover,.btn:hover{background:var(--ink);color:var(--bg)}
+.ph button,.ph .btn{color:#fff;border-color:#fff}
+.ph button:hover,.ph .btn:hover{background:#fff;color:#000}
+button[aria-pressed=true]{background:var(--ink);color:var(--bg)}
+.sm{padding:4px 10px;border-color:var(--line);color:var(--mute)}
+.sm[aria-pressed=true]{border-color:var(--ink)}
+.panel{padding:18px 18px 40px}
+.panel section{padding:16px 0;border-top:1px solid var(--line)}
+.panel section:first-child{border-top:0;padding-top:0}
+h2{font-size:.85rem;font-weight:500;color:var(--mute);margin-bottom:8px}
+#status{font-size:1.05rem}
+#status.on::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--acc);margin-right:8px;animation:p 1.2s infinite}
+@keyframes p{50%{opacity:.25}}
+.meta{display:flex;gap:18px;color:var(--mute);font-size:.85rem;margin-top:4px;font-variant-numeric:tabular-nums}
+ul{list-style:none;padding:0}
+#list li{display:grid;grid-template-columns:1fr auto auto;gap:12px;padding:6px 0;border-bottom:1px solid var(--line);font-size:.92rem}
+#list li span{color:var(--mute)}#list li em{font-style:normal;color:var(--acc);min-width:7.5em;text-align:right}
+#list .none{display:block;color:var(--mute)}
+.ctl{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 0}
+input[type=range]{accent-color:var(--acc);width:150px}
+input[type=checkbox]{accent-color:var(--acc);width:18px;height:18px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+#out{color:var(--acc);min-height:1.4em;font-size:.9rem;margin-top:8px}
+details p{color:var(--mute);font-size:.9rem;margin-top:8px;max-width:58ch}
+summary{cursor:pointer}
+@media(min-width:900px){
+  .app{grid-template-columns:1fr 380px;height:100dvh}
+  .view{height:100dvh}
+  .panel{overflow:auto;border-left:1px solid var(--line)}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="view">
+    <video id="v" playsinline muted></video>
+    <canvas id="c"></canvas>
+    <div class="ph" id="ph">
+      <h1>Carnofagocentrismo</h1>
+      <p id="phmsg">La cámara busca animales domésticos. Cada uno de sus movimientos produce el ruido del control humano que lo rodea.</p>
+      <div class="row">
+        <button id="start">Activar cámara</button>
+        <label class="btn">Usar un video<input id="file" type="file" accept="video/*" hidden></label>
+      </div>
+    </div>
+  </div>
+
+  <main class="panel">
+    <section>
+      <div id="status" role="status" aria-live="polite">En espera</div>
+      <div class="meta"><span id="mt">Análisis: —</span><span id="cnt">Sonidos: 0</span></div>
+    </section>
+    <section>
+      <h2>Animales en escena</h2>
+      <ul id="list"><li class="none">Ninguno todavía</li></ul>
+    </section>
+    <section>
+      <h2>Alcance</h2>
+      <div class="row" style="justify-content:flex-start">
+        <button class="sm" id="near" aria-pressed="true">Rápido</button>
+        <button class="sm" id="far" aria-pressed="false">Lejano</button>
+        <button class="sm" id="flip" hidden>Cambiar cámara</button>
+      </div>
+      <p style="color:var(--mute);font-size:.85rem;margin-top:8px">Lejano usa un modelo más preciso y revisa por zonas para encontrar animales pequeños. Es más lento.</p>
+    </section>
+    <section>
+      <h2>Sonido</h2>
+      <label class="ctl">Ruidos<input type="checkbox" id="snd" checked></label>
+      <label class="ctl">Voces humanas<input type="checkbox" id="voc" checked></label>
+      <label class="ctl">Volumen<input type="range" id="vol" min="0" max="1" step=".05" value=".7"></label>
+    </section>
+    <section>
+      <h2>Probar sonidos</h2>
+      <div class="chips" id="ta"></div>
+      <div class="chips" id="tm"></div>
+      <div id="out" aria-live="polite"></div>
+    </section>
+    <section>
+      <details>
+        <summary>Acerca de este proyecto</summary>
+        <p>El carnofagocentrismo nombra el dominio del ser humano sobre el animal, también sobre el doméstico. La aplicación invierte la mirada: no escucha al humano, sino que le devuelve al animal el mundo sonoro que lo gobierna: cadenas, silbatos, cercas, cerrojos, órdenes. El volumen y la posición del sonido dependen de lo lejos y de dónde esté cada animal.</p>
+        <p>La imagen se procesa en tu dispositivo y no se envía a ningún servidor. Para mejores resultados, mantén el teléfono quieto: si la cámara se mueve, también lo parece el animal.</p>
+      </details>
+    </section>
+  </main>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const COCO = {dog:"perro", cat:"gato", bird:"ave", horse:"caballo", cow:"vaca", sheep:"oveja"};
+const MV = ["quieto","caminar","correr","saltar","acercarse","alejarse","inquieto"];
+
+/* animal → [sonido, orden humana] para cada movimiento, en el orden de MV */
+const MAP = {
+  perro:[["kibble","Buen chico."],["chain",""],["whistle","¡Aquí!"],["clap","¡No!"],["kibble","Ven."],["whistle","¡Ven aquí!"],["rattle","¡Quieto!"]],
+  gato:[["bell",""],["bell",""],["bell","Michi, michi."],["clap","¡Bájate!"],["kibble","Michi, michi."],["clap","Minino, ven."],["rattle",""]],
+  ave:[["tinkle",""],["tinkle",""],["rattle","¡Shh!"],["latch",""],["tinkle","Pajarito lindo."],["latch","¡Vuelve!"],["rattle",""]],
+  caballo:[["harness",""],["hoof",""],["gallop","¡Arre!"],["whip","¡Hop!"],["bucket","Tranquilo."],["whistle","¡So!"],["shock","¡So, quieto!"]],
+  vaca:[["cowbell",""],["cowbell",""],["shock","¡Arre!"],["shock","¡Eh!"],["pulsator",""],["whistle","¡Arre, vaca!"],["latch",""]],
+  oveja:[["sbell",""],["sbell",""],["whistle","¡Ahí!"],["clippers",""],["clippers",""],["whistle","¡Atrás!"],["latch",""]]
+};
+const LAB = {kibble:"pienso",chain:"cadena",whistle:"silbato",clap:"palmada",rattle:"reja",bell:"cascabel",tinkle:"jaula",latch:"cerrojo",harness:"arreos",hoof:"herraduras",gallop:"galope herrado",whip:"látigo",bucket:"cubo",shock:"cerca eléctrica",cowbell:"cencerro",pulsator:"ordeñadora",sbell:"campanilla",clippers:"esquiladora"};
+
+/* ---------- síntesis de sonido ---------- */
+const A = {ctx:null, vol:.7, on:true, voice:true};
+const R = (a, b) => a + Math.random() * (b - a);
+function T(d, t, f, u, o = {}) {
+  const c = A.ctx, s = c.createOscillator(), g = c.createGain();
+  s.type = o.y || "sine"; s.frequency.setValueAtTime(f, t);
+  if (o.z) s.frequency.exponentialRampToValueAtTime(o.z, t + u);
+  g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(o.g || .2, t + .003);
+  g.gain.exponentialRampToValueAtTime(.0001, t + u);
+  s.connect(g).connect(d); s.start(t); s.stop(t + u + .02);
+}
+function N(d, t, u, f, q, g, y = "bandpass") {
+  const c = A.ctx, s = c.createBufferSource(), b = c.createBiquadFilter(), v = c.createGain();
+  s.buffer = A.nz; s.loop = true; b.type = y; b.frequency.value = f; b.Q.value = q;
+  v.gain.setValueAtTime(g, t); v.gain.exponentialRampToValueAtTime(.0001, t + u);
+  s.connect(b).connect(v).connect(d); s.start(t, Math.random()); s.stop(t + u + .02);
+}
+const clink = (d, t, f, g) => { T(d, t, f, .25, {g}); T(d, t, f * 2.76, .14, {g:g / 2}); N(d, t, .03, 6000, 2, g); };
+const bellF = f => (d, t) => [1, 2.4, 3.1].forEach((r, i) => T(d, t, f * r, .8 / (i + 1), {g:.12 / (i + 1)}));
+const hoof = fast => (d, t) => (fast ? [0, .13, .26, .5] : [0, .4, .8]).forEach(x => { T(d, t + x, 200, .1, {z:90, g:.45}); N(d, t + x, .04, 900, 1, .3); });
+const SND = {
+  kibble:(d, t) => { for (let i = 0; i < 9; i++) N(d, t + R(0, .5), .025, R(3000, 7000), 1, .12); },
+  chain:(d, t) => [0, .07, .16, .23, .35].forEach(x => clink(d, t + x, R(2400, 4200), .2)),
+  whistle:(d, t) => [0, .42].forEach(x => { T(d, t + x, 1800, .35, {z:2700, g:.18}); N(d, t + x, .35, 2400, 10, .05); }),
+  clap:(d, t) => [0, .012, .026].forEach(x => N(d, t + x, .06, 1500, .8, .5)),
+  rattle:(d, t) => { for (let i = 0; i < 12; i++) clink(d, t + R(0, .6), R(1800, 5000), .1); N(d, t, .6, 3000, 1, .06); },
+  bell:bellF(2200), sbell:bellF(900),
+  tinkle:(d, t) => { for (let i = 0; i < 5; i++) T(d, t + i * .09, R(3500, 6500), .18, {g:.1}); },
+  latch:(d, t) => [0, .2].forEach((x, i) => { T(d, t + x, i ? 120 : 200, .06, {y:"square", z:50, g:.3}); N(d, t + x, .02, 2500, 2, .3); }),
+  harness:(d, t) => { for (let i = 0; i < 5; i++) T(d, t + i * .05, R(3000, 4500), .15, {g:.08}); N(d, t, .3, 6000, 1, .06, "highpass"); },
+  hoof:hoof(false), gallop:hoof(true),
+  whip:(d, t) => { N(d, t, .07, 5000, .7, .5, "highpass"); T(d, t, 2200, .1, {z:300, g:.3}); },
+  bucket:(d, t) => { T(d, t, 600, .3, {y:"triangle", z:480, g:.25}); N(d, t, .05, 1500, 1, .3); },
+  shock:(d, t) => { for (let i = 0; i < 6; i++) { T(d, t + i * .07, 90, .04, {y:"square", g:.2}); N(d, t + i * .07, .025, 2500, .7, .3, "highpass"); } },
+  cowbell:(d, t) => { [540, 810].forEach(f => T(d, t, f, .35, {y:"square", g:.08})); N(d, t, .3, 800, 2, .15); },
+  pulsator:(d, t) => [0, .38, .76, 1.14].forEach(x => N(d, t + x, .2, 500, .8, .3, "lowpass")),
+  clippers:(d, t) => { T(d, t, 120, 1, {y:"sawtooth", g:.06}); T(d, t, 127, 1, {y:"sawtooth", g:.06}); N(d, t, 1, 3000, 3, .08); }
+};
+
+function initAudio() {
+  if (A.ctx) { if (A.ctx.state === "suspended") A.ctx.resume(); return; }
+  const c = A.ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const b = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  A.nz = b;
+  const comp = c.createDynamicsCompressor();
+  A.master = c.createGain(); A.master.gain.value = A.vol;
+  A.master.connect(comp); comp.connect(c.destination);
+}
+function play(id, pan, gain) {
+  if (!A.ctx || !A.on) return;
+  const g = A.ctx.createGain(); g.gain.value = gain;
+  let end = g;
+  if (A.ctx.createStereoPanner) { const p = A.ctx.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan)); g.connect(p); end = p; }
+  end.connect(A.master);
+  SND[id](g, A.ctx.currentTime + .01);
+}
+let lastVoice = 0;
+function say(txt) {
+  if (!A.voice || !A.on || !window.speechSynthesis || speechSynthesis.speaking) return;
+  const u = new SpeechSynthesisUtterance(txt);
+  u.lang = "es-ES"; u.pitch = .7; u.rate = .95; u.volume = A.vol;
+  speechSynthesis.speak(u);
+}
+
+/* ---------- seguimiento y movimiento ---------- */
+let tracks = [], ids = {}, VW = 1, VH = 1, ripples = [], total = 0, lastAny = 0;
+const iou = (a, b) => {
+  const x = Math.max(a[0], b[0]), y = Math.max(a[1], b[1]);
+  const w = Math.min(a[0] + a[2], b[0] + b[2]) - x, h = Math.min(a[1] + a[3], b[1] + b[3]) - y;
+  if (w <= 0 || h <= 0) return 0;
+  const i = w * h; return i / (a[2] * a[3] + b[2] * b[3] - i);
+};
+function classify(k, t) {
+  const up = -k.vy;
+  if (up > 1.6 && up > Math.abs(k.vx) * 1.5) return "saltar";
+  if (k.rev.filter(x => t - x < 4000).length >= 3) return "inquieto";
+  if (k.sr > .35) return "acercarse";
+  if (k.sr < -.35) return "alejarse";
+  if (k.v > 1.6) return "correr";
+  return k.v > .25 ? "caminar" : "quieto";
+}
+function update(dets, t) {
+  dets.sort((a, b) => b.score - a.score);
+  const kept = [];
+  dets.forEach(d => { if (!kept.some(k => k.cls === d.cls && iou(k.bbox, d.bbox) > .4)) kept.push(d); });
+  const used = new Set();
+  kept.forEach(d => {
+    const [x, y, w, h] = d.bbox, cx = x + w / 2, cy = y + h / 2, sz = Math.max(w, h);
+    let best = null, bd = .7;
+    tracks.forEach(k => {
+      if (k.cls !== d.cls || used.has(k)) return;
+      const dist = Math.hypot(k.cx - cx, k.cy - cy) / Math.max(k.sz, sz);
+      if (dist < bd) { bd = dist; best = k; }
+    });
+    if (!best) {
+      ids[d.cls] = (ids[d.cls] || 0) + 1;
+      best = {cls:d.cls, n:ids[d.cls], cx, cy, sz, bx:x, by:y, bw:w, bh:h, dx:x, dy:y, dw:w, dh:h, t, seen:t, v:0, vx:0, vy:0, sr:0, rev:[], sg:0, mv:null, cand:"", cn:0, sa:0, snd:"", st:0};
+      tracks.push(best);
+    } else {
+      const dt = (t - best.t) / 1000;
+      if (dt > .05) {
+        const e = (o, n) => o + (n - o) * .45;
+        best.vx = e(best.vx, (cx - best.cx) / dt / best.sz);
+        best.vy = e(best.vy, (cy - best.cy) / dt / best.sz);
+        best.v = Math.hypot(best.vx, best.vy);
+        best.sr = e(best.sr, Math.log(sz / best.sz) / dt);
+        if (Math.abs(best.vx) > .4) {
+          const s = Math.sign(best.vx);
+          if (best.sg && s !== best.sg) best.rev.push(t);
+          best.sg = s;
+        }
+        best.t = t;
+      }
+      Object.assign(best, {cx, cy, sz, bx:x, by:y, bw:w, bh:h, seen:t});
+    }
+    used.add(best);
+  });
+  tracks.forEach(k => {
+    if (!used.has(k)) { k.v *= .8; k.vx *= .8; k.vy *= .8; k.sr *= .8; }
+    k.rev = k.rev.filter(x => t - x < 4000);
+  });
+  tracks = tracks.filter(k => t - k.seen < 2500);
+  tracks.forEach(k => {
+    const mv = classify(k, t);
+    k.cn = mv === k.cand ? k.cn + 1 : 1; k.cand = mv;
+    const changed = k.cn >= 2 && mv !== k.mv;
+    if (changed) k.mv = mv;
+    if (!k.mv) return;
+    const every = {quieto:7000, caminar:1800, correr:1100}[k.mv] || 3000;
+    if (changed || t - k.sa > every) fire(k, t, changed);
+  });
+  render();
+}
+function fire(k, t, changed) {
+  if (t - lastAny < 250) return;
+  lastAny = k.sa = t;
+  const [id, ph] = MAP[k.cls][MV.indexOf(k.mv)];
+  play(id, k.cx / VW * 2 - 1, Math.max(.3, Math.min(1, .3 + k.sz / VW * 1.6)));
+  k.snd = id; k.st = t; total++;
+  ripples.push({x:k.cx, y:k.cy, t, r:k.sz});
+  if (ph && changed && t - lastVoice > 7000) { lastVoice = t; say(ph); }
+}
+
+/* ---------- detección ---------- */
+let model = null, far = false, loading = false, running = false, tile = 0, facing = "environment", stream = null;
+const OC = document.createElement("canvas");
+const video = $("#v");
+
+function loadScript(src) {
+  return new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = no; document.head.append(s); });
+}
+async function loadModel() {
+  loading = true; model = null; status();
+  try {
+    if (!window.cocoSsd) {
+      await loadScript("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js");
+      await loadScript("https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js");
+    }
+    model = await cocoSsd.load({base: far ? "mobilenet_v2" : "lite_mobilenet_v2"});
+  } catch (e) {
+    $("#status").textContent = "No se pudo cargar el modelo. Revisa tu conexión y recarga la página.";
+  }
+  loading = false; status();
+}
+async function run(sx, sy, sw, sh, side) {
+  const k = Math.min(1, side / Math.max(sw, sh));
+  OC.width = Math.round(sw * k); OC.height = Math.round(sh * k);
+  OC.getContext("2d").drawImage(video, sx, sy, sw, sh, 0, 0, OC.width, OC.height);
+  const res = await model.detect(OC, 20);
+  return res.filter(o => COCO[o.class]).map(o => ({
+    cls:COCO[o.class], score:o.score,
+    bbox:[sx + o.bbox[0] / k, sy + o.bbox[1] / k, o.bbox[2] / k, o.bbox[3] / k]
+  }));
+}
+async function cycle() {
+  if (!running) return;
+  if (model && video.readyState >= 2 && video.videoWidth) {
+    const W = VW = video.videoWidth, H = VH = video.videoHeight, t0 = performance.now();
+    try {
+      let d = await run(0, 0, W, H, far ? 640 : 512);
+      if (far) {
+        const tw = W * .55, th = H * .55, P = [[0, 0], [W - tw, 0], [0, H - th], [W - tw, H - th]][tile++ % 4];
+        d = d.concat(await run(P[0], P[1], tw, th, 704));
+      }
+      update(d, performance.now());
+      $("#mt").textContent = "Análisis: " + Math.round(performance.now() - t0) + " ms";
+    } catch (e) {}
+  }
+  setTimeout(cycle, 20);
+}
+
+async function openCam() {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:facing, width:{ideal:1920}, height:{ideal:1080}}});
+  } catch (e) {
+    stream = await navigator.mediaDevices.getUserMedia({video:true});
+  }
+  video.removeAttribute("src"); video.loop = false;
+  video.srcObject = stream; await video.play();
+  $("#flip").hidden = false;
+}
+function begin() {
+  $("#ph").hidden = true;
+  initAudio();
+  if (!running) { running = true; requestAnimationFrame(draw); cycle(); }
+  if (!model && !loading) loadModel();
+}
+$("#start").onclick = async () => {
+  try { await openCam(); begin(); }
+  catch (e) { $("#phmsg").textContent = "No se pudo abrir la cámara. Revisa el permiso del navegador o usa un video."; }
+};
+$("#file").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  video.srcObject = null; video.src = URL.createObjectURL(f); video.loop = true;
+  await video.play(); tracks = []; begin();
+};
+$("#flip").onclick = async () => { facing = facing === "environment" ? "user" : "environment"; try { await openCam(); tracks = []; } catch (e) {} };
+
+/* ---------- dibujo ---------- */
+const cv = $("#c");
+function draw() {
+  const r = cv.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+  if (cv.width !== Math.round(r.width * dpr)) { cv.width = r.width * dpr; cv.height = r.height * dpr; }
+  const x = cv.getContext("2d"); x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, r.width, r.height);
+  const sc = Math.max(r.width / VW, r.height / VH), ox = (r.width - VW * sc) / 2, oy = (r.height - VH * sc) / 2;
+  const acc = getComputedStyle(document.documentElement).getPropertyValue("--acc").trim();
+  const t = performance.now();
+  x.font = "12px ui-sans-serif, Arial"; x.textBaseline = "middle";
+  tracks.forEach(k => {
+    const l = .35;
+    k.dx += (k.bx - k.dx) * l; k.dy += (k.by - k.dy) * l; k.dw += (k.bw - k.dw) * l; k.dh += (k.bh - k.dh) * l;
+    const X = k.dx * sc + ox, Y = k.dy * sc + oy, W = k.dw * sc, H = k.dh * sc, c = Math.min(14, W / 3, H / 3);
+    x.strokeStyle = "#fff"; x.lineWidth = 2;
+    x.beginPath();
+    [[X, Y, 1, 1], [X + W, Y, -1, 1], [X, Y + H, 1, -1], [X + W, Y + H, -1, -1]].forEach(([a, b, p, q]) => { x.moveTo(a + p * c, b); x.lineTo(a, b); x.lineTo(a, b + q * c); });
+    x.stroke();
+    const txt = `${k.cls} ${k.n}  ${k.mv || ""}`, tw = x.measureText(txt).width + 12;
+    x.fillStyle = acc; x.fillRect(X, Math.max(0, Y - 20), tw, 20);
+    x.fillStyle = "#fff"; x.fillText(txt, X + 6, Math.max(0, Y - 20) + 10);
+    const age = t - k.st;
+    if (k.snd && age < 1600) {
+      x.globalAlpha = 1 - age / 1600; x.fillStyle = "#fff";
+      x.fillText(LAB[k.snd], X, Y + H + 14); x.globalAlpha = 1;
+    }
+  });
+  ripples = ripples.filter(p => t - p.t < 1000);
+  ripples.forEach(p => {
+    const a = (t - p.t) / 1000;
+    x.strokeStyle = acc; x.lineWidth = 2; x.globalAlpha = 1 - a;
+    x.beginPath(); x.arc(p.x * sc + ox, p.y * sc + oy, (p.r * .3 + p.r * 1.1 * a) * sc, 0, 7); x.stroke(); x.globalAlpha = 1;
+  });
+  requestAnimationFrame(draw);
+}
+
+/* ---------- panel ---------- */
+let lastList = 0;
+function status() {
+  const s = $("#status");
+  if (loading) { s.className = "on"; s.textContent = "Cargando modelo de visión…"; return; }
+  if (!running) { s.className = ""; s.textContent = "En espera"; return; }
+  s.className = "on";
+  s.textContent = tracks.length ? (tracks.length === 1 ? "1 animal en escena" : tracks.length + " animales en escena") : "Buscando animales…";
+}
+function render() {
+  status();
+  $("#cnt").textContent = "Sonidos: " + total;
+  const now = performance.now();
+  if (now - lastList < 250) return;
+  lastList = now;
+  $("#list").innerHTML = tracks.length
+    ? tracks.map(k => `<li><b>${k.cls} ${k.n}</b><span>${k.mv || "…"}</span><em>${k.snd ? LAB[k.snd] : ""}</em></li>`).join("")
+    : '<li class="none">Ninguno todavía</li>';
+}
+$("#near").onclick = $("#far").onclick = e => {
+  const f = e.target.id === "far";
+  if (f === far) return;
+  far = f; $("#near").setAttribute("aria-pressed", String(!f)); $("#far").setAttribute("aria-pressed", String(f));
+  if (running) { model = null; loadModel(); }
+};
+$("#snd").onchange = e => { A.on = e.target.checked; if (!A.on && window.speechSynthesis) speechSynthesis.cancel(); };
+$("#voc").onchange = e => { A.voice = e.target.checked; };
+$("#vol").oninput = e => { A.vol = +e.target.value; if (A.master) A.master.gain.value = A.vol; };
+
+/* probar sonidos */
+let testA = "perro";
+Object.keys(MAP).forEach(a => {
+  const b = document.createElement("button");
+  b.className = "sm"; b.textContent = a; b.dataset.a = a; b.setAttribute("aria-pressed", String(a === testA));
+  b.onclick = () => { testA = a; document.querySelectorAll("#ta button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.a === a))); };
+  $("#ta").append(b);
+});
+MV.forEach((m, i) => {
+  const b = document.createElement("button");
+  b.className = "sm"; b.textContent = m;
+  b.onclick = () => {
+    initAudio();
+    const [id, ph] = MAP[testA][i];
+    play(id, 0, .8);
+    $("#out").textContent = `${testA} ${m}: ${LAB[id]}` + (ph ? ` y la voz dice “${ph}”` : "");
+    if (ph) say(ph);
+  };
+  $("#tm").append(b);
+});
+</script>
+</body>
+</html>
